@@ -23,12 +23,8 @@ COLUMNAS_REQUERIDAS = ("order_id", "order_date", "brand", "model_name", "categor
 def new_logic():
     """
     Crea el catalogo para almacenar las estructuras de datos
-
-    orders:     lista (array_list) con todas las ventas en el orden del archivo.
-    by_brand:   mapa (separate chaining) marca -> RBT con llave (descuento, fecha, order_id). Req. 1.
-    by_country: mapa (separate chaining) pais  -> RBT con llave (fecha, order_id). Req. 5.
-    min_sale / max_sale: venta de menor / mayor precio final (se llenan al cargar).
     """
+    #TODO: Llama a las funciónes de creación de las estructuras de datos
     catalog = {
         "orders": al.new_list(),
         "by_brand": mp.new_map(16, 4),
@@ -43,17 +39,6 @@ def new_logic():
 
 
 # Utilidades
-
-def _fecha_iso(texto):
-    """
-    order_date viene como AAAA-MM-DD. En ese formato comparar fechas como texto
-    equivale a compararlas cronologicamente.
-    """
-    fecha = texto.strip()
-    if len(fecha) != 10 or fecha[4] != "-" or fecha[7] != "-":
-        raise ValueError("la fecha '%s' no esta en formato AAAA-MM-DD" % texto)
-    return fecha
-
 
 def _indexar_en_arbol(tabla, nombre, llave, orden):
     """
@@ -83,19 +68,14 @@ def find_data_file(name):
 
 def load_data(catalog, filename):
     """
-    Carga los datos del reto leyendo el CSV UNA sola vez.
-
-    En el mismo recorrido se llena la lista principal, los indices (mapas de RBT por marca
-    y por pais) y se actualizan la venta de menor y de mayor precio final.
-    Si algo falla, el catalogo anterior queda intacto.
-
-    Complejidad: O(n log n) (n inserciones en RBT de costo O(log n); put/get del mapa O(1)).
+    Carga los datos del reto
     """
+    # TODO: Realizar la carga de datos
     inicio = get_time()
 
     ruta = find_data_file(filename)
     if ruta is None:
-        raise ValueError("No se encontro el archivo %s" % filename)
+        return None            # el archivo no existe
 
     nuevo = new_logic()
     ordenes = nuevo["orders"]
@@ -106,42 +86,39 @@ def load_data(catalog, filename):
         lector = csv.reader(archivo_csv)
         encabezado = next(lector, None)
         if encabezado is None:
-            raise ValueError("El archivo esta vacio: %s" % filename)
+            return None        # archivo vacio
 
         pos = {}
         for i in range(len(encabezado)):
             pos[encabezado[i].strip()] = i
         faltantes = [c for c in COLUMNAS_REQUERIDAS if c not in pos]
         if faltantes:
-            raise ValueError("Faltan columnas en el CSV: %s" % ", ".join(faltantes))
+            return None        # al CSV le faltan columnas
 
         for fila in lector:
             if not fila:
                 continue
-            try:
-                fecha = _fecha_iso(fila[pos["order_date"]])
-                orden = {
-                    "order_id": fila[pos["order_id"]].strip(),
-                    "order_date": fecha,
-                    "brand": fila[pos["brand"]].strip(),
-                    "model_name": fila[pos["model_name"]].strip(),
-                    "category": fila[pos["category"]].strip(),
-                    "gender": fila[pos["gender"]].strip(),
-                    "size": fila[pos["size"]].strip(),
-                    "color": fila[pos["color"]].strip(),
-                    "base_price_usd": float(fila[pos["base_price_usd"]]),
-                    "discount_percent": float(fila[pos["discount_percent"]]),
-                    "final_price_usd": float(fila[pos["final_price_usd"]]),
-                    "units_sold": int(fila[pos["units_sold"]]),
-                    "revenue_usd": float(fila[pos["revenue_usd"]]),
-                    "payment_method": fila[pos["payment_method"]].strip(),
-                    "sales_channel": fila[pos["sales_channel"]].strip(),
-                    "country": fila[pos["country"]].strip(),
-                    "customer_income_level": fila[pos["customer_income_level"]].strip(),
-                    "customer_rating": float(fila[pos["customer_rating"]]),
-                }
-            except (ValueError, IndexError) as error:
-                raise ValueError("Fila %d invalida: %s" % (lector.line_num, error)) from error
+            fecha = fila[pos["order_date"]].strip()
+            orden = {
+                "order_id": fila[pos["order_id"]].strip(),
+                "order_date": fecha,
+                "brand": fila[pos["brand"]].strip(),
+                "model_name": fila[pos["model_name"]].strip(),
+                "category": fila[pos["category"]].strip(),
+                "gender": fila[pos["gender"]].strip(),
+                "size": fila[pos["size"]].strip(),
+                "color": fila[pos["color"]].strip(),
+                "base_price_usd": float(fila[pos["base_price_usd"]]),
+                "discount_percent": float(fila[pos["discount_percent"]]),
+                "final_price_usd": float(fila[pos["final_price_usd"]]),
+                "units_sold": int(fila[pos["units_sold"]]),
+                "revenue_usd": float(fila[pos["revenue_usd"]]),
+                "payment_method": fila[pos["payment_method"]].strip(),
+                "sales_channel": fila[pos["sales_channel"]].strip(),
+                "country": fila[pos["country"]].strip(),
+                "customer_income_level": fila[pos["customer_income_level"]].strip(),
+                "customer_rating": float(fila[pos["customer_rating"]]),
+            }
 
             al.add_last(ordenes, orden)
 
@@ -189,13 +166,9 @@ def load_data(catalog, filename):
 
 def req_1(catalog, brand, min_disc, max_disc):
     """
-    Req. 1 (individual): ordenes de una marca con descuento en [min_disc, max_disc].
-
-    by_brand[brand] (mapa) entrega el RBT de la marca, cuya llave es la tupla
-    (descuento, fecha, order_id). rbt.values() recorre solo el rango y retorna las
-    ordenes YA ordenadas: descuento ascendente y, en empate, fecha ascendente.
-    Complejidad: O(1) + O(log n + k), con k las ordenes que cumplen el filtro.
+    Retorna el resultado del requerimiento 1
     """
+    # TODO: Modificar el requerimiento 1
     inicio = get_time()
 
     arbol = mp.get(catalog["by_brand"], brand)
@@ -323,12 +296,61 @@ def req_4(catalog, start_date, end_date, income_level, n):
   
 
 
-def req_5(catalog):
+def req_5(catalog, country, date_from, date_to, n):
     """
     Retorna el resultado del requerimiento 5
     """
     # TODO: Modificar el requerimiento 5
-    pass
+    inicio = get_time()
+
+    arbol = mp.get(catalog["by_country"], country)
+
+    por_marca = mp.new_map(16, 4)      # marca -> acumulados
+    total_ordenes = 0
+    if arbol is not None:
+        ordenes = rbt.values(arbol, (date_from, ""), (date_to, "~"))
+        nodo = ordenes["first"]
+        while nodo is not None:
+            orden = nodo["info"]
+            acc = mp.get(por_marca, orden["brand"])
+            if acc is None:
+                acc = {"brand": orden["brand"], "orders": 0, "sum_rating": 0.0,
+                       "sum_revenue": 0.0, "best_order": orden}
+                mp.put(por_marca, orden["brand"], acc)
+            acc["orders"] += 1
+            acc["sum_rating"] += orden["customer_rating"]
+            acc["sum_revenue"] += orden["revenue_usd"]
+            mejor = acc["best_order"]
+            if (orden["units_sold"] > mejor["units_sold"]
+                    or (orden["units_sold"] == mejor["units_sold"]
+                        and orden["order_id"] > mejor["order_id"])):
+                acc["best_order"] = orden      # empate en unidades: gana el mayor order_id
+            total_ordenes += 1
+            nodo = nodo["next"]
+
+    # Ranking: RBT con llave (-promedio, marca)
+    ranking = rbt.new_map()
+    marcas = mp.value_set(por_marca)
+    for i in range(al.size(marcas)):
+        acc = al.get_element(marcas, i)
+        acc["avg_rating"] = acc["sum_rating"] / acc["orders"]
+        acc["avg_revenue"] = acc["sum_revenue"] / acc["orders"]
+        rbt.put(ranking, (-acc["avg_rating"], acc["brand"]), acc)
+
+    # Las primeras n del recorrido inorden
+    top = al.new_list()
+    nodo = rbt.value_set(ranking)["first"]
+    while nodo is not None and al.size(top) < n:
+        al.add_last(top, nodo["info"])
+        nodo = nodo["next"]
+
+    return {
+        "total_orders": total_ordenes,
+        "total_brands": mp.size(por_marca),
+        "top": top,
+        "time_ms": delta_time(inicio, get_time()),
+    }
+
 
 def req_6(catalog, start_date, end_date, min_price, max_price, n):
     """

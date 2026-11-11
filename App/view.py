@@ -21,6 +21,7 @@ def new_logic():
     """
         Se crea una instancia del controlador
     """
+    #TODO: Llamar la función de la lógica donde se crean las estructuras de datos
     return logic.new_logic()
 
 def print_menu():
@@ -86,6 +87,7 @@ def load_data(control):
     """
     Carga los datos
     """
+    #TODO: Realizar la carga de datos
     print("Archivos disponibles:")
     for i in range(len(DATA_FILES)):
         print("  %d- %s" % (i + 1, DATA_FILES[i]))
@@ -99,10 +101,9 @@ def load_data(control):
         print("No se encontro el archivo " + name + " en la carpeta Data.\n")
         return None
 
-    try:
-        report = logic.load_data(control, name)
-    except ValueError as error:
-        print("No se pudo cargar el archivo: " + str(error) + "\n")
+    report = logic.load_data(control, name)
+    if report is None:
+        print("No se pudo cargar el archivo " + name + " (vacio o con columnas faltantes).\n")
         return None
     print_load_report(report, name)
     return report
@@ -119,6 +120,7 @@ def print_req_1(control):
     """
         Función que imprime la solución del Requerimiento 1 en consola
     """
+    # TODO: Imprimir el resultado del requerimiento 1
     if al.size(control["orders"]) == 0:
         print("Primero debe cargar la informacion (opcion 0).\n")
         return
@@ -302,12 +304,78 @@ def print_req_4(control):
 
 
 
+def fecha_valida(texto):
+    """True si texto tiene el formato AAAA-MM-DD con mes 1-12 y dia 1-31 (sin usar try/except)."""
+    if len(texto) != 10 or texto[4] != "-" or texto[7] != "-":
+        return False
+    anio = texto[0:4]
+    mes = texto[5:7]
+    dia = texto[8:10]
+    if not (anio.isdigit() and mes.isdigit() and dia.isdigit()):
+        return False
+    return 1 <= int(mes) <= 12 and 1 <= int(dia) <= 31
+
+
 def print_req_5(control):
     """
         Función que imprime la solución del Requerimiento 5 en consola
     """
     # TODO: Imprimir el resultado del requerimiento 5
-    pass
+    if al.size(control["orders"]) == 0:
+        print("Primero debe cargar la informacion (opcion 0).\n")
+        return
+
+    country = input("Pais a analizar (ej: Germany): ").strip()
+    date_from = input("Fecha inicial (AAAA-MM-DD): ").strip()
+    date_to = input("Fecha final (AAAA-MM-DD): ").strip()
+    n_text = input("Cantidad N de marcas a mostrar: ").strip()
+
+    if country == "":
+        print("Entrada invalida: el pais no puede estar vacio.\n")
+        return
+    if not fecha_valida(date_from) or not fecha_valida(date_to):
+        print("Entrada invalida: las fechas deben tener formato AAAA-MM-DD.\n")
+        return
+    if date_from > date_to:
+        print("Entrada invalida: la fecha inicial no puede ser posterior a la final.\n")
+        return
+    if not n_text.isdigit() or int(n_text) < 1:
+        print("Entrada invalida: N debe ser un entero de al menos 1.\n")
+        return
+    n = int(n_text)
+
+    result = logic.req_5(control, country, date_from, date_to, n)
+
+    print("\n=== Requerimiento 5: mejores %d marcas por calificacion en %s (%s a %s) ===" %
+          (n, country, date_from, date_to))
+    print("Tiempo de ejecucion: {:,.2f} ms".format(result["time_ms"]))
+    print("Total de marcas consideradas: {:,}".format(result["total_brands"]))
+    top = result["top"]
+    if al.size(top) == 0:
+        print("No se encontraron ordenes (revise que el pais este escrito exactamente igual).\n")
+        return
+    print("Ordenes que cumplen el filtro: {:,}".format(result["total_orders"]))
+
+    rows_brand = []
+    rows_best = []
+    for i in range(al.size(top)):
+        b = al.get_element(top, i)
+        o = b["best_order"]
+        rows_brand.append([b["brand"], "{:,}".format(b["orders"]), "%.4f" % b["avg_rating"],
+                           "{:,.2f}".format(b["avg_revenue"])])
+        rows_best.append([b["brand"], o["order_id"], o["order_date"], o["model_name"],
+                          o["country"], o["sales_channel"], o["units_sold"],
+                          "%.1f" % o["customer_rating"]])
+
+    print("\nMarcas con mejor calificacion promedio:")
+    print(tabulate(rows_brand, headers=["Marca", "Ordenes", "Calificacion prom.",
+                                        "Ingreso prom. (USD)"],
+                   tablefmt="grid", disable_numparse=True))
+    print("\nOrden con mas unidades vendidas por marca:")
+    print(tabulate(rows_best, headers=["Marca", "order_id", "Fecha", "Modelo", "Pais", "Canal",
+                                       "Unidades", "Calificacion"],
+                   tablefmt="grid", disable_numparse=True))
+    print()
 
 
 def print_req_6(control):
