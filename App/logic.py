@@ -1,6 +1,7 @@
 import csv
 import os
 import time
+import math
 
 from DataStructures.List import array_list as al
 from DataStructures.List import single_linked_list as sll
@@ -32,6 +33,9 @@ def new_logic():
         "orders": al.new_list(),
         "by_brand": mp.new_map(16, 4),
         "by_country": mp.new_map(16, 4),
+        "by_country_rating": mp.new_map(16, 4),
+        "by_brand_income": mp.new_map(16, 4),
+        "by_brand_date": mp.new_map(16, 4),
         "min_sale": None,
         "max_sale": None,
     }
@@ -216,12 +220,40 @@ def req_1(catalog, brand, min_disc, max_disc):
     }
 
 
-def req_2(catalog):
+def req_2(catalog, country, min_rating, max_rating):
     """
     Retorna el resultado del requerimiento 2
     """
     # TODO: Modificar el requerimiento 2
-    pass
+    inicio = get_time()
+
+    arbol = mp.get(catalog["by_country_rating"], country)
+
+    mostrar = sll.new_list()
+    total = 0
+    costo_total = 0.0
+    if arbol is not None:
+        lo = (min_rating, "", "")
+        hi = (max_rating, "9999-99-99", "~")
+        ordenes = rbt.values(arbol, lo, hi)          # ascendente por (calificacion, fecha, order_id)
+        total = sll.size(ordenes)
+
+        posicion = 0
+        nodo = ordenes["first"]
+        while nodo is not None:
+            orden = nodo["info"]
+            costo_total += orden["final_price_usd"]
+            if posicion < 5 or posicion >= total - 5:
+                sll.add_first(mostrar, orden)         # add_first invierte: queda descendente
+            posicion += 1
+            nodo = nodo["next"]
+
+    return {
+        "total_orders": total,
+        "total_cost": costo_total,
+        "orders": mostrar,
+        "time_ms": delta_time(inicio, get_time()),
+    }
 
 
 def req_3(catalog):
@@ -232,12 +264,63 @@ def req_3(catalog):
     pass
 
 
-def req_4(catalog):
+def req_4(catalog, start_date, end_date, income_level, n):
     """
     Retorna el resultado del requerimiento 4
     """
     # TODO: Modificar el requerimiento 4
-    pass
+    inicio = get_time()
+
+    por_marca = catalog["by_brand_income"]
+    ranking = rbt.new_map()
+
+    marcas = mp.key_set(por_marca)
+    for i in range(al.size(marcas)):
+        marca = al.get_element(marcas, i)
+        arbol = mp.get(por_marca, marca)
+
+        ordenes = rbt.values(arbol, (income_level, start_date, ""), (income_level, end_date, "~"))
+        cantidad = sll.size(ordenes)
+        if cantidad == 0:
+            continue
+
+        suma_precio = 0.0
+        suma_ingreso = 0.0
+        mejor = None
+        nodo = ordenes["first"]
+        while nodo is not None:
+            orden = nodo["info"]
+            suma_precio += orden["final_price_usd"]
+            ingreso = orden["revenue_usd"]
+            suma_ingreso += ingreso
+            if mejor is None or ingreso >= mejor["revenue_usd"]:
+                mejor = orden
+            nodo = nodo["next"]
+
+        rbt.put(ranking, (-cantidad, marca), {
+            "brand": marca,
+            "total_orders": cantidad,
+            "avg_price": suma_precio / cantidad,
+            "avg_revenue": suma_ingreso / cantidad,
+            "best_order": mejor,
+        })
+
+    elegidas = sll.new_list()
+    ordenadas = rbt.value_set(ranking)
+    nodo = ordenadas["first"]
+    tomadas = 0
+    while nodo is not None and tomadas < n:
+        sll.add_last(elegidas, nodo["info"])
+        tomadas += 1
+        nodo = nodo["next"]
+
+    return {
+        "total_brands": rbt.size(ranking),
+        "brands": elegidas,
+        "time_ms": delta_time(inicio, get_time()),
+    }
+
+  
 
 
 def req_5(catalog):
@@ -247,12 +330,83 @@ def req_5(catalog):
     # TODO: Modificar el requerimiento 5
     pass
 
-def req_6(catalog):
+def req_6(catalog, start_date, end_date, min_price, max_price, n):
     """
     Retorna el resultado del requerimiento 6
     """
     # TODO: Modificar el requerimiento 6
-    pass
+    inicio = get_time()
+
+    por_marca = catalog["by_brand_date"]
+    ranking = rbt.new_map()
+
+    marcas = mp.key_set(por_marca)
+    for i in range(al.size(marcas)):
+        marca = al.get_element(marcas, i)
+        arbol = mp.get(por_marca, marca)
+
+        ordenes = rbt.values(arbol, (start_date, ""), (end_date, "~"))
+
+        # Pasada 1: cantidad y promedio del descuento (solo ordenes en el rango de precios base)
+        cantidad = 0
+        suma = 0.0
+        nodo = ordenes["first"]
+        while nodo is not None:
+            orden = nodo["info"]
+            precio_base = orden["base_price_usd"]
+            if min_price <= precio_base <= max_price:
+                cantidad += 1
+                suma += orden["discount_percent"]
+            nodo = nodo["next"]
+        if cantidad == 0:
+            continue
+        promedio = suma / cantidad
+
+        # Pasada 2: desviacion estandar poblacional y orden mas cercana al promedio
+        suma_cuadrados = 0.0
+        cercana = None
+        menor_dif = 0.0
+        nodo = ordenes["first"]
+        while nodo is not None:
+            orden = nodo["info"]
+            precio_base = orden["base_price_usd"]
+            if min_price <= precio_base <= max_price:
+                dif = orden["discount_percent"] - promedio
+                suma_cuadrados += dif * dif
+                if dif < 0:
+                    dif = -dif
+                if (cercana is None or dif < menor_dif
+                        or (dif == menor_dif and orden["order_id"] < cercana["order_id"])):
+                    cercana = orden
+                    menor_dif = dif
+            nodo = nodo["next"]
+        desviacion = math.sqrt(suma_cuadrados / cantidad)
+
+        # round(): evita que ruido de punto flotante (~1e-15) rompa un empate real en la desviacion
+        rbt.put(ranking, (round(desviacion, 9), promedio, marca), {
+            "brand": marca,
+            "total_orders": cantidad,
+            "avg_discount": promedio,
+            "std_discount": desviacion,
+            "closest_order": cercana,
+        })
+
+    elegidas = sll.new_list()
+    ordenadas = rbt.value_set(ranking)
+    nodo = ordenadas["first"]
+    tomadas = 0
+    while nodo is not None and tomadas < n:
+        sll.add_last(elegidas, nodo["info"])
+        tomadas += 1
+        nodo = nodo["next"]
+
+    return {
+        "total_brands": rbt.size(ranking),
+        "brands": elegidas,
+        "time_ms": delta_time(inicio, get_time()),
+    }
+
+
 
 
 # Funciones para medir tiempos de ejecucion

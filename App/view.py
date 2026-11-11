@@ -1,4 +1,5 @@
 import sys
+import datetime
 
 default_limit = 1000
 sys.setrecursionlimit(default_limit * 10)
@@ -178,7 +179,50 @@ def print_req_2(control):
         Función que imprime la solución del Requerimiento 2 en consola
     """
     # TODO: Imprimir el resultado del requerimiento 2
-    pass
+    if al.size(control["orders"]) == 0:
+        print("Primero debe cargar la informacion (opcion 0).\n")
+        return
+
+    country = input("Pais de venta a analizar (ej: USA): ").strip()
+    try:
+        min_rating = float(input("Calificacion minima del cliente: ").strip().replace(",", "."))
+        max_rating = float(input("Calificacion maxima del cliente: ").strip().replace(",", "."))
+    except ValueError:
+        print("Entrada invalida: las calificaciones deben ser numeros.\n")
+        return
+    if country == "":
+        print("Entrada invalida: el pais no puede estar vacio.\n")
+        return
+    if min_rating > max_rating:
+        print("Entrada invalida: la calificacion minima no puede ser mayor que la maxima.\n")
+        return
+
+    result = logic.req_2(control, country, min_rating, max_rating)
+
+    print("\n=== Requerimiento 2: %s con calificacion entre %.1f y %.1f ===" % (country, min_rating, max_rating))
+    print("Tiempo de ejecucion: {:,.2f} ms".format(result["time_ms"]))
+    print("Total de ordenes que cumplen el filtro: {:,}".format(result["total_orders"]))
+    if result["total_orders"] == 0:
+        print("No se encontraron ordenes (revise que el pais este escrito exactamente igual).\n")
+        return
+    print("Costo total final: {:,.2f} USD".format(result["total_cost"]))
+
+    # result["orders"] trae solo lo que se imprime (<= 10 ordenes), ya en el orden pedido
+    shown = result["orders"]
+    headers = ["order_id", "Fecha", "Marca", "Modelo", "Pais", "Canal",
+               "Calificacion", "Precio final (USD)", "Ingreso total (USD)"]
+    rows = []
+    for i in range(sll.size(shown)):
+        order = sll.get_element(shown, i)
+        rows.append([order["order_id"], order["order_date"], order["brand"], order["model_name"],
+                     order["country"], order["sales_channel"], "{:.1f}".format(order["customer_rating"]),
+                     "{:,.2f}".format(order["final_price_usd"]), "{:,.2f}".format(order["revenue_usd"])])
+
+    print("\nOrdenes por calificacion descendente (y fecha de la mas reciente a la mas antigua en empate):")
+    print(tabulate(rows, headers=headers, tablefmt="grid", disable_numparse=True))
+    if result["total_orders"] > 10:
+        print("(Se muestran las 5 primeras y las 5 ultimas de {:,} ordenes)".format(result["total_orders"]))
+    print()
 
 
 def print_req_3(control):
@@ -194,7 +238,68 @@ def print_req_4(control):
         Función que imprime la solución del Requerimiento 4 en consola
     """
     # TODO: Imprimir el resultado del requerimiento 4
-    pass
+    if al.size(control["orders"]) == 0:
+        print("Primero debe cargar la informacion (opcion 0).\n")
+        return
+
+    start_text = input("Fecha inicial (AAAA-MM-DD): ").strip()
+    end_text = input("Fecha final (AAAA-MM-DD): ").strip()
+    income = input("Nivel de ingresos del cliente (Low, Medium o High): ").strip().capitalize()
+    n_text = input("Cantidad N de marcas a mostrar: ").strip()
+
+    try:
+        start_date = datetime.datetime.strptime(start_text, "%Y-%m-%d").strftime("%Y-%m-%d")
+        end_date = datetime.datetime.strptime(end_text, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        print("Entrada invalida: las fechas deben tener formato AAAA-MM-DD.\n")
+        return
+    if start_date != start_text or end_date != end_text:
+        print("Entrada invalida: las fechas deben tener formato AAAA-MM-DD (con ceros, ej: 2021-01-05).\n")
+        return
+    if start_date > end_date:
+        print("Entrada invalida: la fecha inicial no puede ser posterior a la final.\n")
+        return
+    if income not in ("Low", "Medium", "High"):
+        print("Entrada invalida: el nivel de ingresos debe ser Low, Medium o High.\n")
+        return
+    if not n_text.isdigit() or int(n_text) < 1:
+        print("Entrada invalida: N debe ser un entero positivo.\n")
+        return
+    n = int(n_text)
+
+    result = logic.req_4(control, start_date, end_date, income, n)
+
+    print("\n=== Requerimiento 4: marcas con mas ordenes, ingresos %s, entre %s y %s ===" % (income, start_date, end_date))
+    print("Tiempo de ejecucion: {:,.2f} ms".format(result["time_ms"]))
+    print("Numero total de marcas consideradas: {:,}".format(result["total_brands"]))
+    if result["total_brands"] == 0:
+        print("No se encontraron ordenes para ese rango de fechas y nivel de ingresos.\n")
+        return
+    brands = result["brands"]
+    print("Marcas mostradas (las {:,} con mas ordenes): {:,}".format(n, sll.size(brands)))
+
+    summary_rows = []
+    best_rows = []
+    for i in range(sll.size(brands)):
+        info = sll.get_element(brands, i)
+        order = info["best_order"]
+        summary_rows.append([info["brand"], "{:,}".format(info["total_orders"]),
+                             "{:,.2f}".format(info["avg_price"]), "{:,.2f}".format(info["avg_revenue"])])
+        best_rows.append([order["brand"], order["order_id"], order["order_date"], order["model_name"],
+                          order["country"], order["sales_channel"],
+                          "{:,.2f}".format(order["final_price_usd"]), "{:,.2f}".format(order["revenue_usd"])])
+
+    print("\nMarcas por numero de ordenes descendente (y nombre ascendente en empate):")
+    print(tabulate(summary_rows, headers=["Marca", "Total ordenes", "Precio final promedio (USD)",
+                                          "Ingreso promedio (USD)"],
+                   tablefmt="grid", disable_numparse=True))
+    print("\nOrden con mayor ingreso generado de cada marca (si hay empate, la mas reciente):")
+    print(tabulate(best_rows, headers=["Marca", "order_id", "Fecha", "Modelo", "Pais", "Canal",
+                                       "Precio final (USD)", "Ingreso (USD)"],
+                   tablefmt="grid", disable_numparse=True))
+    print()
+
+
 
 
 def print_req_5(control):
@@ -210,7 +315,71 @@ def print_req_6(control):
         Función que imprime la solución del Requerimiento 6 en consola
     """
     # TODO: Imprimir el resultado del requerimiento 6
-    pass
+    if al.size(control["orders"]) == 0:
+        print("Primero debe cargar la informacion (opcion 0).\n")
+        return
+
+    start_text = input("Fecha inicial (AAAA-MM-DD): ").strip()
+    end_text = input("Fecha final (AAAA-MM-DD): ").strip()
+    try:
+        min_price = float(input("Precio base minimo (USD): ").strip().replace(",", "."))
+        max_price = float(input("Precio base maximo (USD): ").strip().replace(",", "."))
+    except ValueError:
+        print("Entrada invalida: los precios base deben ser numeros.\n")
+        return
+    n_text = input("Cantidad N de marcas a mostrar: ").strip()
+
+    try:
+        start_date = datetime.datetime.strptime(start_text, "%Y-%m-%d").strftime("%Y-%m-%d")
+        end_date = datetime.datetime.strptime(end_text, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        print("Entrada invalida: las fechas deben tener formato AAAA-MM-DD.\n")
+        return
+    if start_date != start_text or end_date != end_text:
+        print("Entrada invalida: las fechas deben tener formato AAAA-MM-DD (con ceros, ej: 2021-01-05).\n")
+        return
+    if start_date > end_date:
+        print("Entrada invalida: la fecha inicial no puede ser posterior a la final.\n")
+        return
+    if min_price > max_price:
+        print("Entrada invalida: el precio base minimo no puede ser mayor que el maximo.\n")
+        return
+    if not n_text.isdigit() or int(n_text) < 1:
+        print("Entrada invalida: N debe ser un entero positivo.\n")
+        return
+    n = int(n_text)
+
+    result = logic.req_6(control, start_date, end_date, min_price, max_price, n)
+
+    print("\n=== Requerimiento 6: marcas mas consistentes en descuentos, %s a %s, precio base %g-%g USD ===" % (
+        start_date, end_date, min_price, max_price))
+    print("Tiempo de ejecucion: {:,.2f} ms".format(result["time_ms"]))
+    print("Numero total de marcas resultado del filtro: {:,}".format(result["total_brands"]))
+    if result["total_brands"] == 0:
+        print("No se encontraron ordenes para ese rango de fechas y precios base.\n")
+        return
+    brands = result["brands"]
+    print("Marcas mostradas (las {:,} mas consistentes): {:,}".format(n, sll.size(brands)))
+
+    summary_rows = []
+    closest_rows = []
+    for i in range(sll.size(brands)):
+        info = sll.get_element(brands, i)
+        order = info["closest_order"]
+        summary_rows.append([info["brand"], "{:,}".format(info["total_orders"]),
+                             "{:.2f}".format(info["avg_discount"]), "{:.4f}".format(info["std_discount"])])
+        closest_rows.append([order["brand"], order["order_id"], order["order_date"], order["model_name"],
+                             order["country"], order["sales_channel"], "%g" % order["discount_percent"]])
+
+    print("\nMarcas por consistencia (desviacion estandar ascendente y, en empate, menor promedio de descuento):")
+    print(tabulate(summary_rows, headers=["Marca", "Total ordenes", "Promedio descuento (%)",
+                                          "Desviacion estandar (pp)"],
+                   tablefmt="grid", disable_numparse=True))
+    print("\nOrden con descuento mas cercano al promedio de cada marca (si hay empate, el menor order_id):")
+    print(tabulate(closest_rows, headers=["Marca", "order_id", "Fecha", "Modelo", "Pais", "Canal",
+                                          "Descuento (%)"],
+                   tablefmt="grid", disable_numparse=True))
+    print()
 
 # Se crea la lógica asociado a la vista
 control = new_logic()
