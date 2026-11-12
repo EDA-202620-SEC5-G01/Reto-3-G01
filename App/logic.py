@@ -11,7 +11,6 @@ from DataStructures.Tree import red_black_tree as rbt
 # Evita problemas de buffer al leer el CSV (recomendado en el enunciado)
 csv.field_size_limit(2147483647)
 
-# Carpeta de datos: <proyecto>/Data/Data (el repo trae los CSV dentro de Data/Data).
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIRS = (os.path.join(BASE_DIR, "..", "Data", "Data"), os.path.join(BASE_DIR, "..", "Data"))
 
@@ -75,7 +74,7 @@ def load_data(catalog, filename):
  
     ruta = find_data_file(filename)
     if ruta is None:
-        return None            # el archivo no existe
+        return None
  
     nuevo = new_logic()
     ordenes = nuevo["orders"]
@@ -86,14 +85,17 @@ def load_data(catalog, filename):
         lector = csv.reader(archivo_csv)
         encabezado = next(lector, None)
         if encabezado is None:
-            return None        # archivo vacio
+            return None
  
         pos = {}
         for i in range(len(encabezado)):
             pos[encabezado[i].strip()] = i
-        faltantes = [c for c in COLUMNAS_REQUERIDAS if c not in pos]
+        faltantes = []
+        for c in COLUMNAS_REQUERIDAS:
+            if c not in pos:
+                faltantes.append(c)
         if faltantes:
-            return None        # al CSV le faltan columnas
+            return None
  
         for fila in lector:
             if not fila:
@@ -122,7 +124,6 @@ def load_data(catalog, filename):
  
             al.add_last(ordenes, orden)
  
-            # --- indices (mapa -> RBT) ---
             _indexar_en_arbol(nuevo["by_brand"], orden["brand"],
                               (orden["discount_percent"], fecha, orden["order_id"]), orden)
             _indexar_en_arbol(nuevo["by_country"], orden["country"],
@@ -134,14 +135,13 @@ def load_data(catalog, filename):
             _indexar_en_arbol(nuevo["by_brand_date"], orden["brand"],
                               (fecha, orden["order_id"]), orden)                                 
  
-            # --- menor y mayor precio final (con desempate por fecha) ---
             precio = orden["final_price_usd"]
             if (menor is None or precio < menor["final_price_usd"]
                     or (precio == menor["final_price_usd"] and fecha > menor["order_date"])):
-                menor = orden          # empate: gana la mas reciente
+                menor = orden
             if (mayor is None or precio > mayor["final_price_usd"]
                     or (precio == mayor["final_price_usd"] and fecha < mayor["order_date"])):
-                mayor = orden          # empate: gana la mas antigua
+                mayor = orden
  
     nuevo["min_sale"] = menor
     nuevo["max_sale"] = mayor
@@ -154,7 +154,6 @@ def load_data(catalog, filename):
         primeros_cinco = al.sub_list(ordenes, 0, k)
         ultimos_cinco = al.sub_list(ordenes, total - k, k)
  
-    # Solo si todo salio bien se reemplaza el contenido del catalogo
     catalog.clear()
     catalog.update(nuevo)
  
@@ -166,8 +165,6 @@ def load_data(catalog, filename):
         "last_five": ultimos_cinco,
         "time_ms": delta_time(inicio, get_time()),
     }
-
-# Funciones de consulta sobre el catálogo
 
 
 def req_1(catalog, brand, min_disc, max_disc):
@@ -214,7 +211,7 @@ def req_2(catalog, country, min_rating, max_rating):
     if arbol is not None:
         lo = (min_rating, "", "")
         hi = (max_rating, "9999-99-99", "~")
-        ordenes = rbt.values(arbol, lo, hi)          # ascendente por (calificacion, fecha, order_id)
+        ordenes = rbt.values(arbol, lo, hi)
         total = sll.size(ordenes)
 
         posicion = 0
@@ -223,7 +220,7 @@ def req_2(catalog, country, min_rating, max_rating):
             orden = nodo["info"]
             costo_total += orden["final_price_usd"]
             if posicion < 5 or posicion >= total - 5:
-                sll.add_first(mostrar, orden)         # add_first invierte: queda descendente
+                sll.add_first(mostrar, orden)
             posicion += 1
             nodo = nodo["next"]
 
@@ -311,7 +308,7 @@ def req_5(catalog, country, date_from, date_to, n):
 
     arbol = mp.get(catalog["by_country"], country)
 
-    por_marca = mp.new_map(16, 4)      # marca -> acumulados
+    por_marca = mp.new_map(16, 4)
     total_ordenes = 0
     if arbol is not None:
         ordenes = rbt.values(arbol, (date_from, ""), (date_to, "~"))
@@ -330,11 +327,10 @@ def req_5(catalog, country, date_from, date_to, n):
             if (orden["units_sold"] > mejor["units_sold"]
                     or (orden["units_sold"] == mejor["units_sold"]
                         and orden["order_id"] > mejor["order_id"])):
-                acc["best_order"] = orden      # empate en unidades: gana el mayor order_id
+                acc["best_order"] = orden
             total_ordenes += 1
             nodo = nodo["next"]
 
-    # Ranking: RBT con llave (-promedio, marca)
     ranking = rbt.new_map()
     marcas = mp.value_set(por_marca)
     for i in range(al.size(marcas)):
@@ -343,7 +339,6 @@ def req_5(catalog, country, date_from, date_to, n):
         acc["avg_revenue"] = acc["sum_revenue"] / acc["orders"]
         rbt.put(ranking, (-acc["avg_rating"], acc["brand"]), acc)
 
-    # Las primeras n del recorrido inorden
     top = al.new_list()
     nodo = rbt.value_set(ranking)["first"]
     while nodo is not None and al.size(top) < n:
@@ -375,7 +370,6 @@ def req_6(catalog, start_date, end_date, min_price, max_price, n):
 
         ordenes = rbt.values(arbol, (start_date, ""), (end_date, "~"))
 
-        # Pasada 1: cantidad y promedio del descuento (solo ordenes en el rango de precios base)
         cantidad = 0
         suma = 0.0
         nodo = ordenes["first"]
@@ -390,7 +384,6 @@ def req_6(catalog, start_date, end_date, min_price, max_price, n):
             continue
         promedio = suma / cantidad
 
-        # Pasada 2: desviacion estandar poblacional y orden mas cercana al promedio
         suma_cuadrados = 0.0
         cercana = None
         menor_dif = 0.0
@@ -410,7 +403,6 @@ def req_6(catalog, start_date, end_date, min_price, max_price, n):
             nodo = nodo["next"]
         desviacion = math.sqrt(suma_cuadrados / cantidad)
 
-        # round(): evita que ruido de punto flotante (~1e-15) rompa un empate real en la desviacion
         rbt.put(ranking, (round(desviacion, 9), promedio, marca), {
             "brand": marca,
             "total_orders": cantidad,
@@ -433,8 +425,6 @@ def req_6(catalog, start_date, end_date, min_price, max_price, n):
         "brands": elegidas,
         "time_ms": delta_time(inicio, get_time()),
     }
-
-
 
 
 # Funciones para medir tiempos de ejecucion

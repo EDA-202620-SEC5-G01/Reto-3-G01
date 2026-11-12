@@ -1,5 +1,4 @@
 import sys
-import datetime
 
 default_limit = 1000
 sys.setrecursionlimit(default_limit * 10)
@@ -15,6 +14,26 @@ DATA_FILES = (
     "global_sports_footwear_sales-medium.csv",
     "global_sports_footwear_sales-large.csv",
 )
+
+
+def es_numero(texto):
+    """True si el texto es un numero (acepta coma o punto decimal)."""
+    texto = texto.replace(",", ".")
+    if texto.startswith("-"):
+        texto = texto[1:]
+    return texto.replace(".", "", 1).isdigit()
+
+
+def fecha_valida(texto):
+    """True si el texto tiene el formato AAAA-MM-DD."""
+    if len(texto) != 10 or texto[4] != "-" or texto[7] != "-":
+        return False
+    anio = texto[0:4]
+    mes = texto[5:7]
+    dia = texto[8:10]
+    if not (anio.isdigit() and mes.isdigit() and dia.isdigit()):
+        return False
+    return 1 <= int(mes) <= 12 and 1 <= int(dia) <= 31
 
 
 def new_logic():
@@ -71,9 +90,9 @@ def print_load_report(report, filename):
         print("El archivo no contiene ventas.\n")
         return
 
-    print("\nVenta con menor precio final (si hay empate, la mas reciente):")
+    print("\nVenta con menor precio final:")
     print_price_extreme(report["min_order"])
-    print("\nVenta con mayor precio final (si hay empate, la mas antigua):")
+    print("\nVenta con mayor precio final:")
     print_price_extreme(report["max_order"])
 
     print("\nPrimeros 5 registros cargados:")
@@ -126,15 +145,16 @@ def print_req_1(control):
         return
 
     brand = input("Marca a analizar (ej: Nike): ").strip()
-    try:
-        min_disc = float(input("Descuento minimo (%): ").strip().replace(",", "."))
-        max_disc = float(input("Descuento maximo (%): ").strip().replace(",", "."))
-    except ValueError:
-        print("Entrada invalida: los descuentos deben ser numeros.\n")
-        return
+    min_text = input("Descuento minimo (%): ").strip()
+    max_text = input("Descuento maximo (%): ").strip()
     if brand == "":
         print("Entrada invalida: la marca no puede estar vacia.\n")
         return
+    if not es_numero(min_text) or not es_numero(max_text):
+        print("Entrada invalida: los descuentos deben ser numeros.\n")
+        return
+    min_disc = float(min_text.replace(",", "."))
+    max_disc = float(max_text.replace(",", "."))
     if min_disc > max_disc:
         print("Entrada invalida: el descuento minimo no puede ser mayor que el maximo.\n")
         return
@@ -169,7 +189,7 @@ def print_req_1(control):
         for i in range(total - 5, total):
             rows.append(build_row(sll.get_element(orders, i)))
 
-    print("\nOrdenes por descuento ascendente (y fecha ascendente en empate):")
+    print("\nOrdenes que cumplen el filtro:")
     print(tabulate(rows, headers=headers, tablefmt="grid", disable_numparse=True))
     if total > 10:
         print("(Se muestran las 5 primeras y las 5 ultimas de {:,} ordenes)".format(total))
@@ -186,15 +206,16 @@ def print_req_2(control):
         return
 
     country = input("Pais de venta a analizar (ej: USA): ").strip()
-    try:
-        min_rating = float(input("Calificacion minima del cliente: ").strip().replace(",", "."))
-        max_rating = float(input("Calificacion maxima del cliente: ").strip().replace(",", "."))
-    except ValueError:
-        print("Entrada invalida: las calificaciones deben ser numeros.\n")
-        return
+    min_text = input("Calificacion minima del cliente: ").strip()
+    max_text = input("Calificacion maxima del cliente: ").strip()
     if country == "":
         print("Entrada invalida: el pais no puede estar vacio.\n")
         return
+    if not es_numero(min_text) or not es_numero(max_text):
+        print("Entrada invalida: las calificaciones deben ser numeros.\n")
+        return
+    min_rating = float(min_text.replace(",", "."))
+    max_rating = float(max_text.replace(",", "."))
     if min_rating > max_rating:
         print("Entrada invalida: la calificacion minima no puede ser mayor que la maxima.\n")
         return
@@ -209,7 +230,6 @@ def print_req_2(control):
         return
     print("Costo total final: {:,.2f} USD".format(result["total_cost"]))
 
-    # result["orders"] trae solo lo que se imprime (<= 10 ordenes), ya en el orden pedido
     shown = result["orders"]
     headers = ["order_id", "Fecha", "Marca", "Modelo", "Pais", "Canal",
                "Calificacion", "Precio final (USD)", "Ingreso total (USD)"]
@@ -220,7 +240,7 @@ def print_req_2(control):
                      order["country"], order["sales_channel"], "{:.1f}".format(order["customer_rating"]),
                      "{:,.2f}".format(order["final_price_usd"]), "{:,.2f}".format(order["revenue_usd"])])
 
-    print("\nOrdenes por calificacion descendente (y fecha de la mas reciente a la mas antigua en empate):")
+    print("\nOrdenes que cumplen el filtro:")
     print(tabulate(rows, headers=headers, tablefmt="grid", disable_numparse=True))
     if result["total_orders"] > 10:
         print("(Se muestran las 5 primeras y las 5 ultimas de {:,} ordenes)".format(result["total_orders"]))
@@ -249,15 +269,11 @@ def print_req_4(control):
     income = input("Nivel de ingresos del cliente (Low, Medium o High): ").strip().capitalize()
     n_text = input("Cantidad N de marcas a mostrar: ").strip()
 
-    try:
-        start_date = datetime.datetime.strptime(start_text, "%Y-%m-%d").strftime("%Y-%m-%d")
-        end_date = datetime.datetime.strptime(end_text, "%Y-%m-%d").strftime("%Y-%m-%d")
-    except ValueError:
+    if not fecha_valida(start_text) or not fecha_valida(end_text):
         print("Entrada invalida: las fechas deben tener formato AAAA-MM-DD.\n")
         return
-    if start_date != start_text or end_date != end_text:
-        print("Entrada invalida: las fechas deben tener formato AAAA-MM-DD (con ceros, ej: 2021-01-05).\n")
-        return
+    start_date = start_text
+    end_date = end_text
     if start_date > end_date:
         print("Entrada invalida: la fecha inicial no puede ser posterior a la final.\n")
         return
@@ -291,29 +307,17 @@ def print_req_4(control):
                           order["country"], order["sales_channel"],
                           "{:,.2f}".format(order["final_price_usd"]), "{:,.2f}".format(order["revenue_usd"])])
 
-    print("\nMarcas por numero de ordenes descendente (y nombre ascendente en empate):")
+    print("\nMarcas con mas ordenes:")
     print(tabulate(summary_rows, headers=["Marca", "Total ordenes", "Precio final promedio (USD)",
                                           "Ingreso promedio (USD)"],
                    tablefmt="grid", disable_numparse=True))
-    print("\nOrden con mayor ingreso generado de cada marca (si hay empate, la mas reciente):")
+    print("\nOrden con mayor ingreso de cada marca:")
     print(tabulate(best_rows, headers=["Marca", "order_id", "Fecha", "Modelo", "Pais", "Canal",
                                        "Precio final (USD)", "Ingreso (USD)"],
                    tablefmt="grid", disable_numparse=True))
     print()
 
 
-
-
-def fecha_valida(texto):
-    """True si texto tiene el formato AAAA-MM-DD con mes 1-12 y dia 1-31 (sin usar try/except)."""
-    if len(texto) != 10 or texto[4] != "-" or texto[7] != "-":
-        return False
-    anio = texto[0:4]
-    mes = texto[5:7]
-    dia = texto[8:10]
-    if not (anio.isdigit() and mes.isdigit() and dia.isdigit()):
-        return False
-    return 1 <= int(mes) <= 12 and 1 <= int(dia) <= 31
 
 
 def print_req_5(control):
@@ -389,26 +393,23 @@ def print_req_6(control):
 
     start_text = input("Fecha inicial (AAAA-MM-DD): ").strip()
     end_text = input("Fecha final (AAAA-MM-DD): ").strip()
-    try:
-        min_price = float(input("Precio base minimo (USD): ").strip().replace(",", "."))
-        max_price = float(input("Precio base maximo (USD): ").strip().replace(",", "."))
-    except ValueError:
-        print("Entrada invalida: los precios base deben ser numeros.\n")
-        return
+    min_text = input("Precio base minimo (USD): ").strip()
+    max_text = input("Precio base maximo (USD): ").strip()
     n_text = input("Cantidad N de marcas a mostrar: ").strip()
 
-    try:
-        start_date = datetime.datetime.strptime(start_text, "%Y-%m-%d").strftime("%Y-%m-%d")
-        end_date = datetime.datetime.strptime(end_text, "%Y-%m-%d").strftime("%Y-%m-%d")
-    except ValueError:
+    if not fecha_valida(start_text) or not fecha_valida(end_text):
         print("Entrada invalida: las fechas deben tener formato AAAA-MM-DD.\n")
         return
-    if start_date != start_text or end_date != end_text:
-        print("Entrada invalida: las fechas deben tener formato AAAA-MM-DD (con ceros, ej: 2021-01-05).\n")
-        return
+    start_date = start_text
+    end_date = end_text
     if start_date > end_date:
         print("Entrada invalida: la fecha inicial no puede ser posterior a la final.\n")
         return
+    if not es_numero(min_text) or not es_numero(max_text):
+        print("Entrada invalida: los precios base deben ser numeros.\n")
+        return
+    min_price = float(min_text.replace(",", "."))
+    max_price = float(max_text.replace(",", "."))
     if min_price > max_price:
         print("Entrada invalida: el precio base minimo no puede ser mayor que el maximo.\n")
         return
@@ -439,11 +440,11 @@ def print_req_6(control):
         closest_rows.append([order["brand"], order["order_id"], order["order_date"], order["model_name"],
                              order["country"], order["sales_channel"], "%g" % order["discount_percent"]])
 
-    print("\nMarcas por consistencia (desviacion estandar ascendente y, en empate, menor promedio de descuento):")
+    print("\nMarcas mas consistentes en descuentos:")
     print(tabulate(summary_rows, headers=["Marca", "Total ordenes", "Promedio descuento (%)",
                                           "Desviacion estandar (pp)"],
                    tablefmt="grid", disable_numparse=True))
-    print("\nOrden con descuento mas cercano al promedio de cada marca (si hay empate, el menor order_id):")
+    print("\nOrden con descuento mas cercano al promedio de cada marca:")
     print(tabulate(closest_rows, headers=["Marca", "order_id", "Fecha", "Modelo", "Pais", "Canal",
                                           "Descuento (%)"],
                    tablefmt="grid", disable_numparse=True))
