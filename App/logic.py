@@ -72,29 +72,29 @@ def load_data(catalog, filename):
     """
     # TODO: Realizar la carga de datos
     inicio = get_time()
-
+ 
     ruta = find_data_file(filename)
     if ruta is None:
         return None            # el archivo no existe
-
+ 
     nuevo = new_logic()
     ordenes = nuevo["orders"]
     menor = None
     mayor = None
-
+ 
     with open(ruta, encoding="utf-8-sig", newline="") as archivo_csv:
         lector = csv.reader(archivo_csv)
         encabezado = next(lector, None)
         if encabezado is None:
             return None        # archivo vacio
-
+ 
         pos = {}
         for i in range(len(encabezado)):
             pos[encabezado[i].strip()] = i
         faltantes = [c for c in COLUMNAS_REQUERIDAS if c not in pos]
         if faltantes:
             return None        # al CSV le faltan columnas
-
+ 
         for fila in lector:
             if not fila:
                 continue
@@ -119,15 +119,21 @@ def load_data(catalog, filename):
                 "customer_income_level": fila[pos["customer_income_level"]].strip(),
                 "customer_rating": float(fila[pos["customer_rating"]]),
             }
-
+ 
             al.add_last(ordenes, orden)
-
+ 
             # --- indices (mapa -> RBT) ---
             _indexar_en_arbol(nuevo["by_brand"], orden["brand"],
                               (orden["discount_percent"], fecha, orden["order_id"]), orden)
             _indexar_en_arbol(nuevo["by_country"], orden["country"],
                               (fecha, orden["order_id"]), orden)
-
+            _indexar_en_arbol(nuevo["by_country_rating"], orden["country"],
+                              (orden["customer_rating"], fecha, orden["order_id"]), orden)       
+            _indexar_en_arbol(nuevo["by_brand_income"], orden["brand"],
+                              (orden["customer_income_level"], fecha, orden["order_id"]), orden)  
+            _indexar_en_arbol(nuevo["by_brand_date"], orden["brand"],
+                              (fecha, orden["order_id"]), orden)                                 
+ 
             # --- menor y mayor precio final (con desempate por fecha) ---
             precio = orden["final_price_usd"]
             if (menor is None or precio < menor["final_price_usd"]
@@ -136,10 +142,10 @@ def load_data(catalog, filename):
             if (mayor is None or precio > mayor["final_price_usd"]
                     or (precio == mayor["final_price_usd"] and fecha < mayor["order_date"])):
                 mayor = orden          # empate: gana la mas antigua
-
+ 
     nuevo["min_sale"] = menor
     nuevo["max_sale"] = mayor
-
+ 
     total = al.size(ordenes)
     primeros_cinco = al.new_list()
     ultimos_cinco = al.new_list()
@@ -147,11 +153,11 @@ def load_data(catalog, filename):
         k = min(5, total)
         primeros_cinco = al.sub_list(ordenes, 0, k)
         ultimos_cinco = al.sub_list(ordenes, total - k, k)
-
+ 
     # Solo si todo salio bien se reemplaza el contenido del catalogo
     catalog.clear()
     catalog.update(nuevo)
-
+ 
     return {
         "total_orders": total,
         "min_order": menor,
